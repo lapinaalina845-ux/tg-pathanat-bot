@@ -518,7 +518,8 @@ def main_keyboard() -> types.ReplyKeyboardMarkup:
 def training_nav_keyboard() -> types.ReplyKeyboardMarkup:
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.row(types.KeyboardButton("➡️ Следующий"))
-    kb.row(types.KeyboardButton("🔙 Назад к разделам"))
+    kb.row(types.KeyboardButton("⬅️ Назад к разделам"))
+    kb.row(types.KeyboardButton("🏠 Выйти в меню"))   # ← ДОБАВИТЬ ЭТУ СТРОКУ
     return kb
 
 

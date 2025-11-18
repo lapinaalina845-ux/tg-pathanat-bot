@@ -702,6 +702,33 @@ def pick_next_training_prep(user_id: int) -> Preparat | None:
     st["train_current_id"] = prep_id
     return PREP_BY_ID[prep_id]
 
+def send_preparat_training(chat_id: int, prep: Preparat, with_keyboard=False):
+    """
+    Отправляет препарат (картинки + название).
+    Если with_keyboard=True — добавляет кнопки навигации обучения.
+    """
+
+    if with_keyboard:
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        kb.row("➡️ Следующий")
+        kb.row("🔙 Назад к разделам")
+        kb.row("🏁 Выйти")
+    else:
+        kb = None
+
+    # отправляем название
+    bot.send_message(chat_id, f"<b>{prep.name}</b>", reply_markup=kb)
+
+    # отправляем изображения
+    for filename in prep.files:
+        path = os.path.join("preparats", filename)
+
+        if not os.path.exists(path):
+            bot.send_message(chat_id, f"Файл отсутствует: {path}")
+            continue
+
+        with open(path, "rb") as photo:
+            bot.send_photo(chat_id, photo)
 
 # ========== ХЕНДЛЕРЫ ==========
 

@@ -557,9 +557,10 @@ def normalize(text: str) -> str:
     return text.lower().replace("ё", "е").strip()
 
 
-# ---------- ОБУЧЕНИЕ: ЛОГИКА СПИСКА ----------
+# ========== ЛОГИКА ОБУЧЕНИЯ ==========
 
-def start_training_for_user(user_id: int, category_key: str) -> List[str]:
+def get_training_list_for_user(user_id: int, category_key: str) -> List[str]:
+    """Подготавливает перемешанный список препаратов для пользователя."""
     if category_key == RANDOM_CATEGORY_KEY:
         ids = [p.id for p in PREPARATS]
     else:
@@ -567,39 +568,100 @@ def start_training_for_user(user_id: int, category_key: str) -> List[str]:
 
     random.shuffle(ids)
 
-    user_state[user_id] = {
-        "mode": "train",
-        "train_category": category_key,
-        "train_remaining": ids,
-        "train_current_id": None,
-    }
+    if user_id not in user_state:
+        user_state[user_id] = {}
+
+    user_state[user_id]["train_category"] = category_key
+    user_state[user_id]["train_remaining"] = ids.copy()   # <-- ВАЖНО: копия
+    user_state[user_id]["mode"] = "train"
 
     return ids
 
 
-def get_next_training_prep(user_id: int) -> Optional[Preparat]:
+def pick_next_training_prep(user_id: int) -> Preparat | None:
+    """Возвращает следующий препарат (без повторов), пока список не закончится."""
     st = user_state.get(user_id)
     if not st or st.get("mode") != "train":
         return None
 
-    remaining: List[str] = st.get("train_remaining", [])
+    remaining = st.get("train_remaining", [])
 
     if not remaining:
-        # все прошли — начинаем заново в этом же разделе
-        category = st["train_category"]
-        remaining = start_training_for_user(user_id, category)
-        st = user_state[user_id]
+        return None   # список пуст
 
-    if not remaining:
-        return None
-
-    prep_id = remaining.pop()
-    st["train_remaining"] = remaining
+    prep_id = remaining.pop()  # <-- ВСЕГДА БЕРЁМ СЛУЧАЙНЫЙ ПОСЛЕ shuffle
     st["train_current_id"] = prep_id
+    st["train_remaining"] = remaining
 
     return PREP_BY_ID[prep_id]
 
 
+def send_preparat_training(chat_id: int, prep: Preparat, with_keyboard=True):
+    """Отправляет препарат для обучения + кнопки."""
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row("➡️ Следующий")
+    kb.row("⬅️ Назад к разделам")
+    kb.row("🏠 Выйти в меню")
+
+    bot.send_message(chat_id, f"<b>{prep.name}</b>", reply_markup=kb)
+
+    for filename in prep.files:
+        path = os.path.join("preparats", filename)
+        if os.path.exists(path):
+            with open(path, "rb") as photo:
+                bot.send_photo(chat_id, photo)
+        else:
+            bot.send_message(chat_id, f"Файл не найден: {path}")
+
+
+# ---------- HANDLERS ----------
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("cat:"))
+def handle_training_category(callback: types.CallbackQuery):
+    _, category_key = callback.data.split(":", 1)
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    ids = get_training_list_for_user(user_id, category_key)
+    if not ids:
+        bot.send_message(chat_id, "Нет препаратов в этом разделе.", reply_markup=main_keyboard())
+        return
+
+    prep_id = user_state[user_id]["train_remaining"].pop()
+    user_state[user_id]["train_current_id"] = prep_id
+
+    send_preparat_training(chat_id, PREP_BY_ID[prep_id])
+
+
+@bot.message_handler(func=lambda m: m.text == "➡️ Следующий")
+def handle_training_next(message: types.Message):
+    user_id = message.from_user.id
+
+    prep = pick_next_training_prep(user_id)
+    if not prep:
+        bot.send_message(
+            message.chat.id,
+            "Все препараты в этом разделе уже показаны 🎉",
+            reply_markup=main_keyboard()
+        )
+        return
+
+    send_preparat_training(message.chat.id, prep)
+
+
+@bot.message_handler(func=lambda m: m.text == "⬅️ Назад к разделам")
+def handle_training_back_to_categories(message: types.Message):
+    user_id = message.from_user.id
+    if user_id in user_state:
+        user_state[user_id].clear()
+    handle_training_menu(message)
+
+
+@bot.message_handler(func=lambda m: m.text == "🏠 Выйти в меню")
+def handle_training_exit(message: types.Message):
+    user_state.pop(message.from_user.id, None)
+    bot.send_message(message.chat.id, "Готово! Ты в главном меню.", reply_markup=main_keyboard())
+    
 # ---------- ОТПРАВКА ПРЕПАРАТОВ В ОБУЧЕНИИ ----------
 
 def send_preparat_training(chat_id: int, prep: Preparat, with_keyboard: bool = False):

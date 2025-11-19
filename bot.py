@@ -3,17 +3,30 @@ import random
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 
+from dotenv import load_dotenv
 import telebot
 from telebot import types
+import logging
 
 # =========================
 # НАСТРОЙКИ БОТА
 # =========================
 
-# Можешь оставить этот токен или вставить свой
-BOT_TOKEN = "8245340349:AAF2sB8Gn5dXiqQQ1ldxAHqk_wpsdcLrH2c"
+load_dotenv()
+
+BOT_TOKEN = os.getenv('BOT_API_KEY')
+
+if not BOT_TOKEN:
+    raise ValueError("API_KEY не найден в .env файле")
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # =========================
 # ДАННЫЕ О ПРЕПАРАТАХ
@@ -1039,5 +1052,5 @@ def handle_stats(message: types.Message):
 # =========================
 
 if __name__ == "__main__":
-    print("Бот запущен (polling)...")
+    logger.info("=== БОТ ЗАПУЩЕН ===")
     bot.infinity_polling()

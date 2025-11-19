@@ -447,27 +447,35 @@ def to_menu(m):
 
 @bot.message_handler(func=lambda m: m.text == "❓ Тест (варианты)")
 def test_mcq(m):
-    uid = m.from_user.id
+    send_mcq_question(m.chat.id, m.from_user.id)
+
+
+def send_mcq_question(chat_id, user_id):
+    # выбираем новый препарат каждый раз
     prep = random.choice(PREPARATS)
 
-    user_state[uid] = {"mode": "mcq", "correct": prep.id}
+    # сохраняем ПРАВИЛЬНЫЙ ID
+    user_state[user_id] = {"mode": "mcq", "correct": prep.id}
 
-    opts = build_mcq(prep)
+    # варианты ответа
+    options = build_mcq(prep)
 
     kb = types.InlineKeyboardMarkup()
-    for o in opts:
+    for o in options:
         kb.add(types.InlineKeyboardButton(o.name, callback_data=f"ans:{o.id}"))
 
+    # отправляем фото
     with open(os.path.join("preparats", prep.files[0]), "rb") as ph:
-        bot.send_photo(m.chat.id, ph, caption="Что за препарат?", reply_markup=kb)
+        bot.send_photo(chat_id, ph, caption="Что за препарат?", reply_markup=kb)
 
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("ans:"))
 def mcq_ans(cb):
     uid = cb.from_user.id
-    st = user_state.get(uid)
 
-    if not st or st["mode"] != "mcq":
+    # проверяем актуальность режима
+    st = user_state.get(uid)
+    if not st or st.get("mode") != "mcq":
         bot.answer_callback_query(cb.id, "Вопрос устарел")
         return
 
@@ -477,20 +485,23 @@ def mcq_ans(cb):
     stats = get_stats(uid)
     stats["total"] += 1
 
+    # проверяем
     if chosen == correct:
         stats["correct"] += 1
-        txt = f"✅ Верно! Это <b>{PREP_BY_ID[correct].name}</b>"
+        text = f"✅ Верно! Это <b>{PREP_BY_ID[correct].name}</b>"
     else:
         stats["wrong"] += 1
         stats["errors"].add(correct)
-        txt = (f"❌ Неверно.\n"
-               f"Правильный ответ: <b>{PREP_BY_ID[correct].name}</b>")
+        text = (
+            f"❌ Неверно.\n"
+            f"Правильный ответ: <b>{PREP_BY_ID[correct].name}</b>"
+        )
 
-    bot.send_message(cb.message.chat.id, txt)
+    bot.send_message(cb.message.chat.id, text)
     bot.answer_callback_query(cb.id)
 
-    test_mcq(cb.message)
-
+    # отправляем НОВЫЙ вопрос (а не test_mcq(cb.message))
+    send_mcq_question(cb.message.chat.id, uid)
 
 # --- ТЕСТ: ВВОД ---
 
